@@ -91,12 +91,32 @@ class LanguageModels():
     1) train_LM(path_to_train_file: <str>): that trains a Language Model using a Bi gram, for specific file.
     2) test_LM(path_to_test_file: <str>, LM_model: <object>): that tests the previously trained model. 
     """
+    _corpus = None
+    _toxic_corpus = None
+    _non_toxic_corpus = None
+
+    def setter(self, path_to_train_file) -> None:
+        """
+        setter creates the corpus that is needed to fit these three language models.
+        """
+        self._corpus = Normalize(path_to_train_file).get_data()
+        self._toxic_corpus = list()
+        self._non_toxic_corpus = list()
+
+        for comment, toxic_check in self._corpus.items():
+            if toxic_check == 1 :
+                self._toxic_corpus.append(comment)
+            else:
+                self._non_toxic_corpus.append(comment)
 
     def train_LM(self, path_to_train_file) -> object():
-        print("Going to fetch data")
-        values = Normalize(path_to_train_file).get_data()
-        print(values)
-
+        try:
+            self.setter(path_to_train_file)
+            print(len(self._corpus.keys()))
+            print(len(self._toxic_corpus))
+            print(len(self._non_toxic_corpus))
+        except:
+            pass
 
     def test_LM(self, path_to_test_file, LM_model) -> str():
         pass
