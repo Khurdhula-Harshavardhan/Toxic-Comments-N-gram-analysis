@@ -1,0 +1,7 @@
+for normalization:
+We perform the following tasks:
+1) remove punctuations.
+2) convert text into lower case for consistency
+3) remove duplicate comments.
+4) create packets of dataset for trianing.
+5) creation of a Dictionary. LISTS ARE SLOW Af! -> The goal is to have a key value pairs like -> < key : comment_text <str>, toxic <int> >
