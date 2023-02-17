@@ -113,6 +113,7 @@ class LanguageModels():
     _non_toxic_bigrams = None
     LM_full = None
     LM_not = None
+    LM_toxic = None
 
     def setter(self, path_to_train_file) -> None:
         """
@@ -155,10 +156,14 @@ class LanguageModels():
         This method loads a model, if it does not exist returns a false boolean value.
         """
         try:
+            print("[PROCESS] Loading the '%s' model, as it already has been trained, and saved previously."%(model_name))
             if model_name  == "Full_LM":
                 self.LM_full = load(model_name+".joblib")
             elif model_name == "LM_not":
                 self.LM_not = load(model_name+".joblib")
+            elif model_name == "LM_toxic":
+                self.LM_toxic = load(model_name+".joblib")
+            
             return True
         except:
             return False
@@ -199,7 +204,7 @@ class LanguageModels():
                 print("[PROCESS] Fitting a Language Model on entire data of Comment_text, please wait this might take some time.")
                 self.LM_full.fit( train, vocab)
                 self.save_model(self.LM_full, "Full_LM")
-
+                
 
             if self.load_model("LM_not") is False:
                 #the Language model does not exist, hence we are to create one.
@@ -209,10 +214,21 @@ class LanguageModels():
                 print("[PROCESS] Fitting a Language Model on non_toxic_comments corpus, please wait this might take some time.")
                 self.LM_not.fit(train, vocab) #train the model.
                 self.save_model(self.LM_not, "LM_not") #Model persistence.
-            else:
-                print("[PROCESS] Loading the model, as it already has been fitted.")
             
-            return self.LM_not
+            if self.load_model("LM_toxic") is False:
+                #the Language model does not exist, hence we are to create one.
+                print("[UPDATE] There is no pre-trained model for toxic_corpus, creating one right now.")
+                train, vocab = padded_everygram_pipeline(2, self._toxic_corpus)
+                self.LM_toxic = Laplace(2) #create an instance of the model.
+                print("[PROCESS] Fitting a Language Model on toxic_comments corpus, please wait this might take some time.")
+                self.LM_toxic.fit(train, vocab) #train the model.
+                self.save_model(self.LM_toxic, "LM_toxic") #Model persistence.
+
+            #lets present vocab of each model.                   
+            print("[INFO] LM_full stats: "+ str(self.LM_full.vocab))
+            print("[INFO] LM_not stats: "+ str(self.LM_not.vocab))
+            print("[INFO] LM_toxic stats: "+ str(self.LM_toxic.vocab))
+            return [self.LM_not, self.LM_not, self.LM_toxic]
         except Exception as e:
             print("[ERR] The following error occured while trying to Train the Language model: " + str(e))
     
@@ -250,9 +266,9 @@ class LanguageModels():
 
 
 obj = LanguageModels()
-flm=obj.train_LM("trainingData/train.csv")
-big = ("<s> bitch move aside", "i")
-co = flm.counts[[big[0]]][big[1]]
-print(co)
-print("%f"%(flm.logscore(big[0],big[1])))
+LMs=obj.train_LM("trainingData/train.csv")
+big = ("wow", "I am so happy for you.")
 
+print("Log Score of comment on LM_full: %f, and normal score on LM_full: %f"%(LMs[0].logscore(big[0],big[1]),LMs[0].score(big[0],big[1])))
+print("Log Score of comment on LM_not: %f, and normal score on LM_not: %f"%(LMs[1].logscore(big[0],big[1]),LMs[1].score(big[0],big[1])))
+print("Log Score of comment on LM_toxic: %f, and normal score on LM_toxic: %f"%(LMs[2].logscore(big[0],big[1]),LMs[2].score(big[0],big[1])))
