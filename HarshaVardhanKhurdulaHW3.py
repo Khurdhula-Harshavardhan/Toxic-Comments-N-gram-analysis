@@ -128,17 +128,20 @@ class LanguageModels():
         self._non_toxic_bigrams = list()
 
         #we tokenize the sentences here:
-        for sentence in self._corpus.keys():
+        for sentence, toxicity in self._corpus.items():
 
             #lets add padding:
             sentence = list(pad_both_ends(sentence.split(), n=2))
             self._train_Data.append(sentence)
 
-        for comment, toxic_check in self._corpus.items():
-            if toxic_check == 1 :
-                self._toxic_corpus.append(comment)
+            #if the comment is toxic, then it has to be added to the toxic corpus, or non_toxic corpus otherwise.
+            if toxicity == 1 :
+                self._toxic_corpus.append(sentence)
             else:
-                self._non_toxic_corpus.append(comment)
+                self._non_toxic_corpus.append(sentence)
+
+        
+            
 
     def save_model(self, model, model_name) -> None:
         """
@@ -267,8 +270,8 @@ class LanguageModels():
 
 obj = LanguageModels()
 LMs=obj.train_LM("trainingData/train.csv")
-big = ("wow", "I am so happy for you.")
-
-print("Log Score of comment on LM_full: %f, and normal score on LM_full: %f"%(LMs[0].logscore(big[0],big[1]),LMs[0].score(big[0],big[1])))
+big = ("you sir are my hero".split())
+print(big[0], big[1])
+print("Log Score of comment on LM_full: %f, and normal score on LM_full: %f"%(LMs[0].logscore(big),LMs[0].score(big)))
 print("Log Score of comment on LM_not: %f, and normal score on LM_not: %f"%(LMs[1].logscore(big[0],big[1]),LMs[1].score(big[0],big[1])))
 print("Log Score of comment on LM_toxic: %f, and normal score on LM_toxic: %f"%(LMs[2].logscore(big[0],big[1]),LMs[2].score(big[0],big[1])))
