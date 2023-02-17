@@ -10,6 +10,7 @@ from nltk.lm.preprocessing import padded_everygram_pipeline
 from nltk.lm import Laplace
 import time
 from nltk import MLEProbDist
+import csv
 from joblib import dump, load
 
 class Normalize():
@@ -263,6 +264,25 @@ class LanguageModels():
             summation = summation + value
         print("A total of %d scores have been determined and the average score is %f "%(counter, (summation/counter)))
            
+    def create_output_file(self) -> None:
+        """
+        Creates a output file, which in this case is a CSV file
+        """
+        try:
+            self._file_handler = open("output.csv", 'w', encoding="UTF-8")
+            self._type_writer = csv.writer(self._file_handler)
+        except Exception as e:
+            print("The following error occured while trying to create an output file: " + str(e))
+
+
+    def writeResult(self, comment_text, score_value):
+        """
+        Writes an individual tuple/new row, to the newly created csv file.
+        """
+        try:
+            self._type_writer.writerow([comment_text, score_value])
+        except Exception as e:
+            print("The following error occured while trying to write a tuple to the csv file: " + str(e))
 
     def test_LM(self, path_to_test_file, LM_model) -> str():
         pass
