@@ -1,5 +1,16 @@
 import pandas as pd
 import re
+import os
+from nltk.util import bigrams
+from nltk.util import everygrams
+from nltk.lm.preprocessing import pad_both_ends
+from nltk.lm import MLE
+from nltk.lm.preprocessing import flatten
+from nltk.lm.preprocessing import padded_everygram_pipeline
+from nltk.lm import Laplace
+import time
+from nltk import MLEProbDist
+from joblib import dump, load
 
 class Normalize():
     _data_frame = None
@@ -23,14 +34,17 @@ class Normalize():
             #setting the class variables here:
             self.PUNCTUATIONS = "[\#\$\%\&\'\(\)\*\+\,\ \-\.\/\:\;\<\=\>\?\@\[\]\^\_\`\{\|\}\~\"]"
         except Exception as e:
-            print("The following error occured while trying to read data from file: " + str(e))
+            print("[ERR] The following error occured while trying to read data from file: " + str(e))
 
     def create_list(self) -> None:
         """
         Coverts the data frame into a two dimensional List, [ [comment_text <str>, toxic <0,1>] ]
         """
-        self._comments =  self._data_frame.values.tolist()
-        print("created list")
+        try:
+            self._comments =  self._data_frame.values.tolist()
+            print("[INFO] Created corpus for the training file provided.")
+        except Exception as e:
+            print("[ERR] The following error occured while trying to create a corpus for entire data: " + str(e))
        
     def lower(self) -> None:
         """
@@ -63,7 +77,7 @@ class Normalize():
             for row in self._comments:
                 row[0] = self.stripper(row[0])
         except Exception as e:
-            print("The following error occured while, discarding Punctuations: " + str(e))
+            print("[ERR] The following error occured while, discarding Punctuations: " + str(e))
 
     def build_corpus(self) -> None:
         """
@@ -76,7 +90,7 @@ class Normalize():
                 else:
                     continue
         except Exception as e:
-            print("The following error occured while trying to create Corpus: " + str(e))
+            print("[ERR] The following error occured while trying to create Corpus: " + str(e))
 
     def get_data(self) -> list():
         self.create_list()
@@ -92,8 +106,13 @@ class LanguageModels():
     2) test_LM(path_to_test_file: <str>, LM_model: <object>): that tests the previously trained model. 
     """
     _corpus = None
+    _train_Data = None
     _toxic_corpus = None
     _non_toxic_corpus = None
+    _toxic_bigrams = None
+    _non_toxic_bigrams = None
+    LM_full = None
+    LM_not = None
 
     def setter(self, path_to_train_file) -> None:
         """
@@ -102,6 +121,17 @@ class LanguageModels():
         self._corpus = Normalize(path_to_train_file).get_data()
         self._toxic_corpus = list()
         self._non_toxic_corpus = list()
+        self._train_Data = list()
+        self._bigrams = list()
+        self._toxic_bigrams = list()
+        self._non_toxic_bigrams = list()
+
+        #we tokenize the sentences here:
+        for sentence in self._corpus.keys():
+
+            #lets add padding:
+            sentence = list(pad_both_ends(sentence.split(), n=2))
+            self._train_Data.append(sentence)
 
         for comment, toxic_check in self._corpus.items():
             if toxic_check == 1 :
@@ -109,17 +139,120 @@ class LanguageModels():
             else:
                 self._non_toxic_corpus.append(comment)
 
-    def train_LM(self, path_to_train_file) -> object():
+    def save_model(self, model, model_name) -> None:
+        """
+        This method, saves a fitted model as it is very computationally expensive to fit the model with large
+        training data, every iteration/run.
+        """
         try:
-            self.setter(path_to_train_file)
-            print(len(self._corpus.keys()))
-            print(len(self._toxic_corpus))
-            print(len(self._non_toxic_corpus))
+            dump(model, (model_name+".joblib"))
+            print("[INFO] Saved the model for model persistence.")
+        except Exception as e:
+            print("[ERR] The following error occured while trying to save the fitted model: " + str(e))
+    
+    def load_model(self, model_name):
+        """
+        This method loads a model, if it does not exist returns a false boolean value.
+        """
+        try:
+            if model_name  == "Full_LM":
+                self.LM_full = load(model_name+".joblib")
+            elif model_name == "LM_not":
+                self.LM_not = load(model_name+".joblib")
+            return True
         except:
-            pass
+            return False
+
+    def get_bigrams(self, list_of_sentences) -> list():
+        try:
+            bigramms = list()
+            for sentence in list_of_sentences:
+                bigramms.extend(list(bigrams(sentence)))
+            return bigramms
+        except Exception as e:
+            print("[ERR] The following error occured while trying to create Bigrams!: "+ str(e))
+
+    def train_LM(self, path_to_train_file) -> Laplace(2):
+        """
+        train_lm method, takes a string argument which is filepath to the training data,
+        if the model(s) that are supposed to be trained, already exist as a result of Model persistence, 
+        we load them.
+        or create and fit new models and also save them otherwise.
+        """
+        try:
+            self.setter(path_to_train_file) #opening the training data csv file.
+            """self._bigrams = self.get_bigrams(self._train_Data) #creating bigrams for all comments
+            print("[INFO] Created bigrams for entire corpus!")
+            self._toxic_bigrams = self.get_bigrams(self._toxic_corpus) #creating bigrams for only comments with toxic label as 1.
+            print("[INFO] Created toxic comment based bigrams")
+            self._non_toxic_bigrams = self.get_bigrams(self._non_toxic_corpus) #creating bigrams for comments with toxic label as 0.
+            print("[INFO] Created non toxic comment based bigrams")"""
+            
+            
+            if self.load_model("Full_LM") is False:
+                print("[UPDATE] There is no pre-trained model for complete corpus, creating one right now.")
+                train, vocab = padded_everygram_pipeline(2, self._train_Data)
+                self.LM_full = Laplace(2)
+
+                #let's apply laplace smoothing for -inf scores when we use ln to determine score
+                # and 0.000 underflow when we use regular score method.
+                print("[PROCESS] Fitting a Language Model on entire data of Comment_text, please wait this might take some time.")
+                self.LM_full.fit( train, vocab)
+                self.save_model(self.LM_full, "Full_LM")
+
+
+            if self.load_model("LM_not") is False:
+                #the Language model does not exist, hence we are to create one.
+                print("[UPDATE] There is no pre-trained model for Non_toxic_corpus, creating one right now.")
+                train, vocab = padded_everygram_pipeline(2, self._non_toxic_corpus)
+                self.LM_not = Laplace(2) #create an instance of the model.
+                print("[PROCESS] Fitting a Language Model on non_toxic_comments corpus, please wait this might take some time.")
+                self.LM_not.fit(train, vocab) #train the model.
+                self.save_model(self.LM_not, "LM_not") #Model persistence.
+            else:
+                print("[PROCESS] Loading the model, as it already has been fitted.")
+            
+            return self.LM_not
+        except Exception as e:
+            print("[ERR] The following error occured while trying to Train the Language model: " + str(e))
+    
+    def test(self) -> None:
+        """
+        this is a default test method to test the newly created Language model on the Bigrams.
+        """
+        print("The model is trained on " + str(len(self._train_Data)) + " sentences")
+        print("We have a total of " + str(len(self._bigrams)) + "Bi grams")
+        print(self.LM_full.counts)
+        print("Starting Language model testing now! this might take a long while!")
+        counter = 0
+        summation = 0
+        for bigramm in self._bigrams:
+            value = self.LM_full.score(bigramm[0], [bigramm[1]])
+            print("Score for '%s' being followed by '%s' is %f"%(bigramm[0], bigramm[1], value))
+            time.sleep(0.05)
+            os.system("cls")
+            counter  = counter + 1
+            summation = summation + value
+
+        counter = 0
+        summation = 0
+        for toxic_bigram in self._toxic_bigrams:
+            value = self.LM_full.score(toxic_bigram[0], [toxic_bigram[1]])
+            print("Score for '%s' being followed by '%s' is %f"%(toxic_bigram[0], toxic_bigram[1], toxic_bigram))
+            os.system("cls")
+            counter  = counter + 1
+            summation = summation + value
+        print("A total of %d scores have been determined and the average score is %f "%(counter, (summation/counter)))
+           
 
     def test_LM(self, path_to_test_file, LM_model) -> str():
         pass
 
 
-LanguageModels().train_LM("trainingData/train.csv")
+obj = LanguageModels()
+flm=obj.train_LM("trainingData/train.csv")
+big = ("<s> bitch move aside", "i")
+co = flm.counts[[big[0]]][big[1]]
+print(co)
+print("%f"%(flm.logscore(big[0],big[1])))
+
