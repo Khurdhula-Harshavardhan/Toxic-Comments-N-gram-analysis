@@ -1,0 +1,18 @@
+for normalization:
+We perform the following tasks:
+1) remove punctuations.
+2) convert text into lower case for consistency
+3) remove duplicate comments.
+4) create packets of dataset for trianing.
+5) creation of a Dictionary. LISTS ARE SLOW Af! -> The goal is to have a key value pairs like -> < key : comment_text <str>, toxic <int> >
+
+
+Important observations:
+
+the score defined by a simple MLE() model is absolutely 0 or NEGATIVE INF! When we use ln.
+However! I decided to use Laplace() model which seems to work well, although we still have 
+very low probabilites.
+
+-> Working with such low probabilites, might still lead to an Underflow Exception.
+
+very hard to debug a fitted model each iteration, hence we try and use model persistence by using joblib.
