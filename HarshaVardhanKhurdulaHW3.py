@@ -115,6 +115,8 @@ class LanguageModels():
     LM_full = None
     LM_not = None
     LM_toxic = None
+    output =  None
+    _type_writer = None
 
     def setter(self, path_to_train_file) -> None:
         """
@@ -132,8 +134,7 @@ class LanguageModels():
         for sentence, toxicity in self._corpus.items():
 
             #lets add padding:
-            sentence = list(pad_both_ends(sentence.split(), n=2))
-            self._train_Data.append(sentence)
+            sentence = sentence.split()
 
             #if the comment is toxic, then it has to be added to the toxic corpus, or non_toxic corpus otherwise.
             if toxicity == 1 :
@@ -189,6 +190,7 @@ class LanguageModels():
         or create and fit new models and also save them otherwise.
         """
         try:
+            
             self.setter(path_to_train_file) #opening the training data csv file.
             """self._bigrams = self.get_bigrams(self._train_Data) #creating bigrams for all comments
             print("[INFO] Created bigrams for entire corpus!")
@@ -197,10 +199,15 @@ class LanguageModels():
             self._non_toxic_bigrams = self.get_bigrams(self._non_toxic_corpus) #creating bigrams for comments with toxic label as 0.
             print("[INFO] Created non toxic comment based bigrams")"""
             
-            
+            self._train_Data = self._toxic_corpus +self._non_toxic_corpus
+            # print(self._train_Data[:5])
+            # print(self._toxic_corpus[:5])
+            # print(self._non_toxic_corpus[:5])
             if self.load_model("Full_LM") is False:
                 print("[UPDATE] There is no pre-trained model for complete corpus, creating one right now.")
-                train, vocab = padded_everygram_pipeline(2, self._train_Data)
+                
+                print(len(self._train_Data))
+                train, vocab = padded_everygram_pipeline(2, self._non_toxic_corpus + self._toxic_corpus)
                 self.LM_full = Laplace(2)
 
                 #let's apply laplace smoothing for -inf scores when we use ln to determine score
@@ -236,7 +243,7 @@ class LanguageModels():
         except Exception as e:
             print("[ERR] The following error occured while trying to Train the Language model: " + str(e))
     
-    def test(self) -> None:
+    def _test(self) -> None:
         """
         this is a default test method to test the newly created Language model on the Bigrams.
         """
@@ -264,34 +271,70 @@ class LanguageModels():
             summation = summation + value
         print("A total of %d scores have been determined and the average score is %f "%(counter, (summation/counter)))
            
-    def create_output_file(self) -> None:
+    def create_output_file(self, file_name) -> None:
         """
         Creates a output file, which in this case is a CSV file
         """
         try:
-            self._file_handler = open("output.csv", 'w', encoding="UTF-8")
+            self._file_handler = open(file_name+".csv", 'w', encoding="UTF-8")
             self._type_writer = csv.writer(self._file_handler)
         except Exception as e:
-            print("The following error occured while trying to create an output file: " + str(e))
+            print("[ERR] The following error occured while trying to create an output file: " + str(e))
 
 
-    def writeResult(self, comment_text, score_value):
+    def writeResult(self) -> None:
         """
         Writes an individual tuple/new row, to the newly created csv file.
         """
         try:
-            self._type_writer.writerow([comment_text, score_value])
+            self._type_writer.writerow(["Comment", "Score"])
+            self._type_writer.writerows(self.output)
+            self.output.clear()
         except Exception as e:
-            print("The following error occured while trying to write a tuple to the csv file: " + str(e))
+            print("[ERR] The following error occured while trying to write a tuple to the csv file: " + str(e))
 
-    def test_LM(self, path_to_test_file, LM_model) -> str():
-        pass
+    def test_LM(self, LM_model) -> None:
+        """"
+        This method provides the ability to test the language models trained and also creates respective output files.
+        """
+        try:
+            self.output = list()
+            self.create_output_file("model_on_entire_corpus")
+            print("[PROCESS] calculating scores for each comment within entire comment corpus! please wait.")
+            for sentence in self._train_Data:
+                score = 0
+                grammy = list(bigrams(sentence))
+                for every_gram in grammy:
+                    score = score + LM_model.score(every_gram)
+                    
+                self.output.append([" ".join(sentence), score])
+            print("[INFO] The values have been calculated, writing these values to model_on_entire_corpus.csv file now... PLEASE WAIT.")
+            self.writeResult()
+            print("[INFO] Values tested for entire corpus stored within model_on_entire_corpus.csv")
 
+            print("[PROCESS] calculating scores for each comment within toxic comments corpus! please wait.")
+            self.create_output_file("model_on_toxic_comments")
+            for sentence in self._toxic_corpus:
+                score = 0
+                grammy = list(bigrams(sentence))
+                for every_gram in grammy:
+                    score = score + LM_model.score(every_gram)
+                self.output.append([" ".join(sentence), score])
+            print("[INFO] The values have been calculated, writing these values to model_on_toxic_comments.csv file now... PLEASE WAIT.")
+            self.writeResult()
+            print("[INFO] Values tested for entire corpus stored within model_on_toxic_comments.csv")
 
-obj = LanguageModels()
-LMs=obj.train_LM("trainingData/train.csv")
-big = ("you sir are my hero".split())
-print(big[0], big[1])
-print("Log Score of comment on LM_full: %f, and normal score on LM_full: %f"%(LMs[0].logscore(big),LMs[0].score(big)))
-print("Log Score of comment on LM_not: %f, and normal score on LM_not: %f"%(LMs[1].logscore(big[0],big[1]),LMs[1].score(big[0],big[1])))
-print("Log Score of comment on LM_toxic: %f, and normal score on LM_toxic: %f"%(LMs[2].logscore(big[0],big[1]),LMs[2].score(big[0],big[1])))
+            print("[PROCESS] calculating scores for each comment within non toxic comments corpus! please wait.")
+            self.create_output_file("model_on_non_toxic_comments")
+            for sentence in self._non_toxic_corpus:
+                score = 0
+                grammy = list(bigrams(sentence))
+                for every_gram in grammy:
+                    score = score + LM_model.score(every_gram)
+                self.output.append([" ".join(sentence), score])
+            print("[INFO] The values have been calculated, writing these values to model_on_non_toxic_comments.csv file now... PLEASE WAIT.")
+            self.writeResult()
+            print("[INFO] Values tested for entire corpus stored within model_on_non_toxic_comments.csv")
+        except Exception as e:
+            print("[ERR] Failed to test language models, due to: " + str(e))
+
